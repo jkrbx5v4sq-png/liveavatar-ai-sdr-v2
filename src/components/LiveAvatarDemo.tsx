@@ -142,12 +142,8 @@ export const LiveAvatarDemo = () => {
         <div className="w-full max-w-md flex flex-col items-center gap-6">
           <div className="text-center">
             <h1 className="text-3xl font-bold text-white mb-2">
-              AI Sales Representative
+              Ihr persönlicher Coach für den Erfolg!
             </h1>
-            <p className="text-gray-400">
-              Create a personalized AI avatar that knows your business and can
-              talk to your customers
-            </p>
           </div>
 
           {error && (
@@ -162,7 +158,7 @@ export const LiveAvatarDemo = () => {
                 htmlFor="participantId"
                 className="block text-sm font-medium text-gray-300 mb-1"
               >
-                Participant ID
+                Passwort
               </label>
               <input
                 type="text"
@@ -181,7 +177,7 @@ export const LiveAvatarDemo = () => {
                 htmlFor="language"
                 className="block text-sm font-medium text-gray-300 mb-1"
               >
-                Conversation Language
+                Sprache
               </label>
               <select
                 id="language"
@@ -197,7 +193,7 @@ export const LiveAvatarDemo = () => {
                 <option value="pl">Polski</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Select the language for the conversation with the AI avatar
+                Bitte wählen Sie die Sprache für eine Unterhaltung aus
               </p>
             </div>
 
@@ -205,7 +201,7 @@ export const LiveAvatarDemo = () => {
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-colors mt-6"
             >
-              Create My AI Sales Rep
+              Starten
             </button>
           </form>
         </div>
