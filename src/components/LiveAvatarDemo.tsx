@@ -7,7 +7,6 @@ type SetupStep = "form" | "generating" | "session";
 
 // Auto-start configuration from environment variables
 const AUTO_START = process.env.NEXT_PUBLIC_AUTO_START === "true";
-const AUTO_WEBSITE_URL = process.env.NEXT_PUBLIC_WEBSITE_URL || "";
 const AUTO_PARTICIPANT_ID = process.env.NEXT_PUBLIC_PARTICIPANT_ID || "";
 
 interface GenerationStatus {
@@ -27,7 +26,6 @@ export const LiveAvatarDemo = () => {
 
   // Form fields - pre-fill from env vars if auto-start is enabled
   const [participantId, setParticipantId] = useState(AUTO_PARTICIPANT_ID);
-  const [businessUrl, setBusinessUrl] = useState(AUTO_WEBSITE_URL);
   const [selectedLanguage, setSelectedLanguage] = useState("de");
 
   // Track if auto-start has been triggered
@@ -37,7 +35,7 @@ export const LiveAvatarDemo = () => {
   useEffect(() => {
     if (
       AUTO_START &&
-      businessUrl.trim() &&
+      participantId.trim() &&
       !autoStartTriggered.current &&
       !sessionToken
     ) {
@@ -45,7 +43,7 @@ export const LiveAvatarDemo = () => {
       // Trigger the form submission programmatically
       startSession();
     }
-  }, [businessUrl, sessionToken]);
+  }, [participantId, sessionToken]);
 
   // Extracted session start logic for reuse
   const startSession = async () => {
@@ -53,12 +51,10 @@ export const LiveAvatarDemo = () => {
     setSetupStep("generating");
 
     try {
-      const normalizedUrl = normalizeUrl(businessUrl);
-
       // Step 1: Generate context
       setGenerationStatus({
-        step: "Analyzing website",
-        detail: `Fetching content from ${normalizedUrl}...`,
+        step: "Creating session context",
+        detail: "Preparing your AI sales representative...",
       });
 
       const contextRes = await fetch("/api/generate-context", {
@@ -66,7 +62,6 @@ export const LiveAvatarDemo = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           participantId,
-          businessUrl: normalizedUrl,
         }),
       });
 
@@ -127,15 +122,6 @@ export const LiveAvatarDemo = () => {
     }
   };
 
-  // Normalize URL - add https:// if missing
-  const normalizeUrl = (url: string): string => {
-    let normalized = url.trim();
-    if (!normalized.match(/^https?:\/\//i)) {
-      normalized = `https://${normalized}`;
-    }
-    return normalized;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await startSession();
@@ -186,28 +172,6 @@ export const LiveAvatarDemo = () => {
                 required
                 className="w-full bg-white/10 text-white placeholder-gray-500 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-white/10"
               />
-            </div>
-
-            <div>
-              <label
-                htmlFor="businessUrl"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Business Website URL
-              </label>
-              <input
-                type="text"
-                id="businessUrl"
-                value={businessUrl}
-                onChange={(e) => setBusinessUrl(e.target.value)}
-                placeholder="e.g., liveavatar.com"
-                required
-                className="w-full bg-white/10 text-white placeholder-gray-500 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-white/10"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                We&apos;ll analyze your website to train the AI on your products and
-                services
-              </p>
             </div>
 
             {/* Language selection */}
@@ -269,8 +233,7 @@ export const LiveAvatarDemo = () => {
 
         <div className="max-w-sm text-center">
           <p className="text-gray-500 text-xs">
-            This may take a moment while we analyze your website and create a
-            personalized AI representative
+            This may take a moment while we create your personalized AI representative
           </p>
         </div>
       </div>
