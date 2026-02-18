@@ -4,7 +4,6 @@ import {
   AVATAR_ID,
   VOICE_ID,
 } from "../secrets";
-import { supabaseServer } from "@/src/lib/supabase/server";
 
 // Fallback: Simple HTML fetch for websites
 async function fetchPageDirect(url: string, timeout = 5000): Promise<string | null> {
@@ -65,144 +64,6 @@ function extractTitleFromHtml(html: string): string {
   return match ? match[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() : "";
 }
 
-interface ParticipantData {
-  personId?: string;
-  personalId: string;
-  firstName?: string;
-  lastName?: string;
-  company?: string;
-  position?: string;
-  validFrom?: string;
-  sourceTable?: string;
-}
-
-function getStringField(row: Record<string, unknown>, aliases: string[]): string {
-  for (const alias of aliases) {
-    const value = row[alias];
-    if (value !== undefined && value !== null && String(value).trim()) {
-      return String(value).trim();
-    }
-  }
-  return "";
-}
-
-async function fetchParticipantData(participantId: string): Promise<ParticipantData | null> {
-  const trimmedId = participantId.trim();
-  const numericId = Number(trimmedId);
-  const idVariants: Array<string | number> = Number.isFinite(numericId) && trimmedId !== ""
-    ? [trimmedId, numericId]
-    : [trimmedId];
-
-  // Primary path: joined query across employments -> persons -> companies
-  for (const idVariant of idVariants) {
-    const { data, error } = await supabaseServer
-      .from("employments")
-      .select(
-        "function_title, valid_from, persons!inner(id, person_no, first_name, last_name), companies!inner(name)"
-      )
-      .eq("persons.person_no", idVariant)
-      .order("valid_from", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!error && data) {
-      const row = data as Record<string, unknown>;
-      const personRel = row.persons as Record<string, unknown> | Record<string, unknown>[] | undefined;
-      const companyRel = row.companies as Record<string, unknown> | Record<string, unknown>[] | undefined;
-      const person = Array.isArray(personRel) ? personRel[0] : personRel;
-      const company = Array.isArray(companyRel) ? companyRel[0] : companyRel;
-
-      return {
-        personId: getStringField(person || {}, ["id"]),
-        personalId: getStringField(person || {}, ["person_no"]) || trimmedId,
-        firstName: getStringField(person || {}, ["first_name"]),
-        lastName: getStringField(person || {}, ["last_name"]),
-        company: getStringField(company || {}, ["name"]),
-        position: getStringField(row, ["function_title"]),
-        validFrom: getStringField(row, ["valid_from"]),
-        sourceTable: "join: employments/persons/companies",
-      };
-    }
-
-    if (error) {
-      console.warn("Supabase join lookup failed:", error.message);
-    }
-  }
-
-  // Fallback path: sequential lookup if join metadata is not available
-  // Step 1: resolve person by person_no from form input
-  let personRow: Record<string, unknown> | null = null;
-  for (const idVariant of idVariants) {
-    const { data, error } = await supabaseServer
-      .from("persons")
-      .select("id, person_no, first_name, last_name")
-      .eq("person_no", idVariant)
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.warn("Supabase persons lookup failed:", error.message);
-      continue;
-    }
-    if (data) {
-      personRow = data as Record<string, unknown>;
-      break;
-    }
-  }
-
-  if (!personRow) {
-    return null;
-  }
-
-  const personDbId = getStringField(personRow, ["id"]);
-  if (!personDbId) {
-    return null;
-  }
-
-  // Step 2: load latest employment for this person
-  const { data: employmentData, error: employmentError } = await supabaseServer
-    .from("employments")
-    .select("person_id, company_id, function_title, valid_from")
-    .eq("person_id", personDbId)
-    .order("valid_from", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (employmentError) {
-    console.warn("Supabase employments lookup failed:", employmentError.message);
-  }
-
-  const employmentRow = (employmentData || {}) as Record<string, unknown>;
-  const companyId = getStringField(employmentRow, ["company_id"]);
-
-  // Step 3: resolve company name for employment.company_id
-  let companyName = "";
-  if (companyId) {
-    const { data: companyData, error: companyError } = await supabaseServer
-      .from("companies")
-      .select("id, name")
-      .eq("id", companyId)
-      .limit(1)
-      .maybeSingle();
-
-    if (companyError) {
-      console.warn("Supabase companies lookup failed:", companyError.message);
-    } else if (companyData) {
-      companyName = getStringField(companyData as Record<string, unknown>, ["name"]);
-    }
-  }
-
-  return {
-    personId: personDbId,
-    personalId: getStringField(personRow, ["person_no"]) || trimmedId,
-    firstName: getStringField(personRow, ["first_name"]),
-    lastName: getStringField(personRow, ["last_name"]),
-    company: companyName,
-    position: getStringField(employmentRow, ["function_title"]),
-    validFrom: getStringField(employmentRow, ["valid_from"]),
-    sourceTable: "persons/employments/companies",
-  };
-}
 
 // Webseiten-Inhalt per direktem Abruf + HTML-Extraktion (ohne Jina)
 async function fetchWebsiteContent(
@@ -270,7 +131,7 @@ async function fetchWebsiteContent(
 }
 
 // Extract business name from URL or content
-function extractBusinessName(url: string, content: string): string {
+function extractBusinessName(url: string): string {
   // Try to get from URL hostname
   try {
     const hostname = new URL(url).hostname;
@@ -296,8 +157,7 @@ function generateSalesPrompt(
   businessName: string,
   websiteContent: string,
   title: string,
-  description: string,
-  participant: ParticipantData | null
+  description: string
 ): string {
   const truncatedContent = websiteContent.slice(0, 10000);
 
@@ -326,8 +186,8 @@ Was du NICHT tust:
 - Keine Bewertungen der Person – nur Verhalten, Ziele und Fortschritt.
 
 Start des Coachings (Pflichtabfolge):
-1. Begrüße den Teilnehmer kurz und nutze dabei die korrekte Anrede und den Nachnamen aus den Teilnehmerdaten (z.B. „Guten Tag, Herr Biller.“ oder „Guten Tag, Frau Böhm.“). Wenn keine Daten vorhanden sind, begrüße neutral („Guten Tag.“).
-2. Teile mit, dass du jetzt die Teilnehmerdaten aus der Webseite nutzt.
+1. Begrüße den Teilnehmer kurz und neutral („Guten Tag.“).
+2. Teile mit, dass du jetzt die Informationen aus der Webseite nutzt.
 
 Umgang mit Teilnehmerdaten:
 - Du greifst bei jeder Session auf die Webseiten-Informationen des Teilnehmers zu.
@@ -337,10 +197,6 @@ Umgang mit Teilnehmerdaten:
   - bisherigen Fortschritt.
 - Du wiederholst wichtige Ziele bewusst.
 - Du fragst aktiv nach, ob diese Ziele erreicht wurden.
-
-Zusätzliche Nutzung der Teilnehmerdaten aus der Datenbank:
-- Nutze Vorname, Nachname, Firma und Position, wenn vorhanden.
-- Wenn Teilnehmerdaten fehlen, coache neutral und nutze nur die Webseiten-Informationen.
 
 Ziel-Logik:
 Wenn Ziele NICHT erreicht wurden:
@@ -384,17 +240,6 @@ Nutze ausschließlich diese Informationen als inhaltliche Wissensbasis und erfin
 WEBSEITEN-INFORMATIONEN (gekürzt auf 10.000 Zeichen):
 
 ${truncatedContent}
-
-TEILNEHMERDATEN AUS DER DATENBANK (falls vorhanden):
-${participant
-  ? `- Persönliche ID: ${participant.personalId}
-${participant.firstName ? `- Vorname: ${participant.firstName}\n` : ""}${
-      participant.lastName ? `- Nachname: ${participant.lastName}\n` : ""
-    }${participant.company ? `- Firma: ${participant.company}\n` : ""}${
-      participant.position ? `- Position: ${participant.position}\n` : ""
-    }${participant.validFrom ? `- Gueltig seit: ${participant.validFrom}\n` : ""
-    }${participant.sourceTable ? `- Quelle: ${participant.sourceTable}\n` : ""}`
-  : "Für die angegebene ID wurden keine Teilnehmerdaten in der Datenbank gefunden. Coache trotzdem gemäß den obigen Regeln anhand der Webseiten-Informationen."}
 `;
 }
 
@@ -449,32 +294,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const businessName = extractBusinessName(businessUrl, websiteContent);
+    const businessName = extractBusinessName(businessUrl);
     console.log(`Business: ${businessName}, Content: ${websiteContent.length} Zeichen`);
 
-    // 2. Teilnehmerdaten aus Supabase per ID (vor der Context-Erstellung)
-    const participantData = await fetchParticipantData(effectiveParticipantId);
-
-    // 3. Coaching-Prompt mit Webseiten-Inhalten + Teilnehmerdaten = Knowledge Base
+    // 2. Coaching-Prompt mit Webseiten-Inhalten als Knowledge Base
     const systemPrompt = generateSalesPrompt(
       businessName,
       websiteContent,
       title,
-      description,
-      participantData
+      description
     );
 
-    let greetingTarget = "Teilnehmer";
-    if (participantData) {
-      const fullName = [participantData.firstName, participantData.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      greetingTarget = fullName || participantData.firstName || participantData.lastName || "Teilnehmer";
-    }
-    const openingText = `Guten Tag, ${greetingTarget}. Ich bin ihr Coach für Führung und Vertrieb.`;
+    const openingText = "Guten Tag. Ich bin ihr Coach für Führung und Vertrieb.";
 
-    // 4. Kontext (Knowledge Base) bei LiveAvatar anlegen
+    // 3. Kontext (Knowledge Base) bei LiveAvatar anlegen
     const timestamp = Date.now();
     const contextRes = await fetch(`${API_URL}/v1/contexts`, {
       method: "POST",
@@ -510,8 +343,6 @@ export async function POST(request: Request) {
       JSON.stringify({
         contextId,
         businessName,
-        personId: participantData?.personId || null,
-        personalId: participantData?.personalId || effectiveParticipantId,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
