@@ -72,14 +72,15 @@ export const LiveAvatarDemo = () => {
 
       const contextData = await contextRes.json();
       console.log("Context response:", contextData);
-      const { contextId, businessName } = contextData;
+      const { contextId, businessName, personId, personalId } = contextData;
 
       // Step 1.5: Create conversation record in DB
       const conversationRes = await fetch("/api/conversations/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          participantId,
+          personId,
+          participantId: personalId || participantId,
           channel: "web",
           avatarName: "Coach-Avatar v1",
         }),
