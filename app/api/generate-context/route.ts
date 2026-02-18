@@ -259,10 +259,11 @@ export async function POST(request: Request) {
     } = await request.json();
 
     const effectiveParticipantId = (participantId || "").toString().trim();
+    const effectiveBusinessUrl = (businessUrl || "").toString().trim();
 
-    if (!effectiveParticipantId || !businessUrl) {
+    if (!effectiveParticipantId) {
       return new Response(
-        JSON.stringify({ error: "Missing participantId or businessUrl" }),
+        JSON.stringify({ error: "Missing participantId" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -277,8 +278,8 @@ export async function POST(request: Request) {
     let description =
       typeof requestDescription === "string" ? requestDescription : "";
 
-    if (!websiteContent) {
-      const fetched = await fetchWebsiteContent(businessUrl);
+    if (!websiteContent && effectiveBusinessUrl) {
+      const fetched = await fetchWebsiteContent(effectiveBusinessUrl);
       websiteContent = fetched.content;
       title = fetched.title;
       description = fetched.description;
@@ -288,13 +289,15 @@ export async function POST(request: Request) {
       return new Response(
         JSON.stringify({
           error:
-            "Kein Webseiten-Inhalt vorhanden. Bitte websiteContent im Request mitsenden oder eine erreichbare businessUrl angeben.",
+            "Kein Webseiten-Inhalt vorhanden. Bitte websiteContent mitsenden oder eine erreichbare businessUrl angeben.",
         }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    const businessName = extractBusinessName(businessUrl);
+    const businessName = effectiveBusinessUrl
+      ? extractBusinessName(effectiveBusinessUrl)
+      : (title || `Teilnehmer ${effectiveParticipantId}`);
     console.log(`Business: ${businessName}, Content: ${websiteContent.length} Zeichen`);
 
     // 2. Coaching-Prompt mit Webseiten-Inhalten als Knowledge Base
