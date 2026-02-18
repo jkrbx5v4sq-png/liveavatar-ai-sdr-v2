@@ -27,7 +27,6 @@ export const LiveAvatarDemo = () => {
 
   // Form fields - pre-fill from env vars if auto-start is enabled
   const [participantId, setParticipantId] = useState(AUTO_PARTICIPANT_ID);
-  const [businessUrl, setBusinessUrl] = useState(AUTO_WEBSITE_URL);
   const [selectedLanguage, setSelectedLanguage] = useState("de");
 
   // Track if auto-start has been triggered
@@ -52,9 +51,13 @@ export const LiveAvatarDemo = () => {
     setError(null);
     setSetupStep("generating");
 
-    const normalizedUrl = normalizeUrl(businessUrl);
-
     try {
+      if (!AUTO_WEBSITE_URL) {
+        throw new Error("Missing NEXT_PUBLIC_WEBSITE_URL configuration");
+      }
+
+      const normalizedUrl = normalizeUrl(AUTO_WEBSITE_URL);
+
       // Step 1: Generate context
       setGenerationStatus({
         step: "Analyzing website",
@@ -77,15 +80,14 @@ export const LiveAvatarDemo = () => {
 
       const contextData = await contextRes.json();
       console.log("Context response:", contextData);
-      const { contextId, businessName, personId, personalId } = contextData;
+      const { contextId, businessName } = contextData;
 
       // Step 1.5: Create conversation record in DB
       const conversationRes = await fetch("/api/conversations/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          personId,
-          participantId: personalId || participantId,
+          participantId,
           channel: "web",
           avatarName: "Coach-Avatar v1",
         }),
@@ -187,28 +189,6 @@ export const LiveAvatarDemo = () => {
                 required
                 className="w-full bg-white/10 text-white placeholder-gray-500 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-white/10"
               />
-            </div>
-
-            <div>
-              <label
-                htmlFor="businessUrl"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Business Website URL
-              </label>
-              <input
-                type="text"
-                id="businessUrl"
-                value={businessUrl}
-                onChange={(e) => setBusinessUrl(e.target.value)}
-                placeholder="e.g., liveavatar.com"
-                required
-                className="w-full bg-white/10 text-white placeholder-gray-500 px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-white/10"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                We&apos;ll analyze your website to train the AI on your products and
-                services
-              </p>
             </div>
 
             {/* Language selection */}
