@@ -4,8 +4,157 @@ import {
   AVATAR_ID,
   VOICE_ID,
 } from "../secrets";
+import { supabaseServer } from "@/src/lib/supabase/server";
 
-function generateSalesPrompt(participantId: string): string {
+interface ParticipantData {
+  personId?: string;
+  personalId: string;
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  position?: string;
+  validFrom?: string;
+  sourceTable?: string;
+}
+
+function getStringField(row: Record<string, unknown>, aliases: string[]): string {
+  for (const alias of aliases) {
+    const value = row[alias];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
+async function fetchParticipantData(participantId: string): Promise<ParticipantData | null> {
+  const trimmedId = participantId.trim();
+  const numericId = Number(trimmedId);
+  const idVariants: Array<string | number> =
+    Number.isFinite(numericId) && trimmedId !== ""
+      ? [trimmedId, numericId]
+      : [trimmedId];
+
+  // Primary path: joined query across employments -> persons -> companies
+  for (const idVariant of idVariants) {
+    const { data, error } = await supabaseServer
+      .from("employments")
+      .select(
+        "function_title, valid_from, persons!inner(id, person_no, first_name, last_name), companies!inner(name)"
+      )
+      .eq("persons.person_no", idVariant)
+      .order("valid_from", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      const row = data as Record<string, unknown>;
+      const personRel = row.persons as
+        | Record<string, unknown>
+        | Record<string, unknown>[]
+        | undefined;
+      const companyRel = row.companies as
+        | Record<string, unknown>
+        | Record<string, unknown>[]
+        | undefined;
+      const person = Array.isArray(personRel) ? personRel[0] : personRel;
+      const company = Array.isArray(companyRel) ? companyRel[0] : companyRel;
+
+      return {
+        personId: getStringField(person || {}, ["id"]),
+        personalId: getStringField(person || {}, ["person_no"]) || trimmedId,
+        firstName: getStringField(person || {}, ["first_name"]),
+        lastName: getStringField(person || {}, ["last_name"]),
+        company: getStringField(company || {}, ["name"]),
+        position: getStringField(row, ["function_title"]),
+        validFrom: getStringField(row, ["valid_from"]),
+        sourceTable: "join: employments/persons/companies",
+      };
+    }
+
+    if (error) {
+      console.warn("Supabase join lookup failed:", error.message);
+    }
+  }
+
+  // Fallback path: sequential lookup if join metadata is not available
+  let personRow: Record<string, unknown> | null = null;
+  for (const idVariant of idVariants) {
+    const { data, error } = await supabaseServer
+      .from("persons")
+      .select("id, person_no, first_name, last_name")
+      .eq("person_no", idVariant)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Supabase persons lookup failed:", error.message);
+      continue;
+    }
+    if (data) {
+      personRow = data as Record<string, unknown>;
+      break;
+    }
+  }
+
+  if (!personRow) {
+    return null;
+  }
+
+  const personDbId = getStringField(personRow, ["id"]);
+  if (!personDbId) {
+    return null;
+  }
+
+  const { data: employmentData, error: employmentError } = await supabaseServer
+    .from("employments")
+    .select("person_id, company_id, function_title, valid_from")
+    .eq("person_id", personDbId)
+    .order("valid_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (employmentError) {
+    console.warn("Supabase employments lookup failed:", employmentError.message);
+  }
+
+  const employmentRow = (employmentData || {}) as Record<string, unknown>;
+  const companyId = getStringField(employmentRow, ["company_id"]);
+
+  let companyName = "";
+  if (companyId) {
+    const { data: companyData, error: companyError } = await supabaseServer
+      .from("companies")
+      .select("id, name")
+      .eq("id", companyId)
+      .limit(1)
+      .maybeSingle();
+
+    if (companyError) {
+      console.warn("Supabase companies lookup failed:", companyError.message);
+    } else if (companyData) {
+      companyName = getStringField(companyData as Record<string, unknown>, [
+        "name",
+      ]);
+    }
+  }
+
+  return {
+    personId: personDbId,
+    personalId: getStringField(personRow, ["person_no"]) || trimmedId,
+    firstName: getStringField(personRow, ["first_name"]),
+    lastName: getStringField(personRow, ["last_name"]),
+    company: companyName,
+    position: getStringField(employmentRow, ["function_title"]),
+    validFrom: getStringField(employmentRow, ["valid_from"]),
+    sourceTable: "persons/employments/companies",
+  };
+}
+
+function generateSalesPrompt(
+  participantId: string,
+  participant: ParticipantData | null
+): string {
   return `Du bist ein professioneller Coach für Führung und Vertrieb.
 Dein Schwerpunkt liegt auf Orientierung, Entscheidungssicherheit und klarer Zielsteuerung.
 
@@ -67,6 +216,17 @@ Du bist jederzeit der Orientierungsgeber.
 Du führst Schritt für Schritt zur Entscheidungssicherheit.
 TEILNEHMER-ID:
 ${participantId}
+
+TEILNEHMERDATEN AUS DER DATENBANK (falls vorhanden):
+${participant
+  ? `- Persönliche ID: ${participant.personalId}
+${participant.firstName ? `- Vorname: ${participant.firstName}\n` : ""}${
+      participant.lastName ? `- Nachname: ${participant.lastName}\n` : ""
+    }${participant.company ? `- Firma: ${participant.company}\n` : ""}${
+      participant.position ? `- Position: ${participant.position}\n` : ""
+    }${participant.validFrom ? `- Gueltig seit: ${participant.validFrom}\n` : ""
+    }${participant.sourceTable ? `- Quelle: ${participant.sourceTable}\n` : ""}`
+  : "Für die angegebene ID wurden keine Teilnehmerdaten in der Datenbank gefunden. Coache trotzdem gemäß den obigen Regeln."}
 `;
 }
 
@@ -91,9 +251,25 @@ export async function POST(request: Request) {
     const selectedVoiceId = voiceId || VOICE_ID;
 
     const businessName = `Teilnehmer ${effectiveParticipantId}`;
-    const systemPrompt = generateSalesPrompt(effectiveParticipantId);
+    const participantData = await fetchParticipantData(effectiveParticipantId);
+    const systemPrompt = generateSalesPrompt(
+      effectiveParticipantId,
+      participantData
+    );
 
-    const openingText = "Guten Tag. Ich bin ihr Coach für Führung und Vertrieb.";
+    let greetingTarget = "Teilnehmer";
+    if (participantData) {
+      const fullName = [participantData.firstName, participantData.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      greetingTarget =
+        fullName ||
+        participantData.firstName ||
+        participantData.lastName ||
+        "Teilnehmer";
+    }
+    const openingText = `Guten Tag, ${greetingTarget}. Ich bin ihr Coach für Führung und Vertrieb.`;
 
     // Kontext (Knowledge Base) bei LiveAvatar anlegen
     const timestamp = Date.now();
@@ -131,6 +307,8 @@ export async function POST(request: Request) {
       JSON.stringify({
         contextId,
         businessName,
+        personId: participantData?.personId || null,
+        personalId: participantData?.personalId || effectiveParticipantId,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
