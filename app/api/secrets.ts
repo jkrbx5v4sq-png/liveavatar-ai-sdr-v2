@@ -17,6 +17,13 @@ export const IS_SANDBOX = false;
 // Voice: Ann - IA (matches the avatar)
 export const VOICE_ID = "864a26b8-bfba-4435-9cc5-1dd593de5ca7";
 
+// Avatar role profile (allowed values: 1, 2, 3, 4)
+// 1 = zielorientiert/strukturiert/dominant
+// 2 = unterstützend + Wissenstransfer + regelmäßige Fragen
+// 3 = Wissenstransfer mit wenig Fragen
+// 4 = motivierend + moderater Wissenstransfer + moderate Fragen
+export const AVATAR_ROLE = process.env.LIVEAVATAR_ROLE_KEY || "";
+
 // Context ID - using the existing Wayne context for now
 // The skill will create custom contexts for specific personas
 export const CONTEXT_ID = "5b9dba8a-aa31-11f0-a6ee-066a7fa2e369";
