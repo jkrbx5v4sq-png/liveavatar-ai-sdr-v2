@@ -3,6 +3,7 @@ import {
   API_URL,
   AVATAR_ID,
   VOICE_ID,
+  AVATAR_ROLE,
 } from "../secrets";
 import { supabaseServer } from "@/src/lib/supabase/server";
 
@@ -15,6 +16,47 @@ interface ParticipantData {
   position?: string;
   validFrom?: string;
   sourceTable?: string;
+}
+
+type AvatarRoleValue = 1 | 2 | 3 | 4;
+
+function getAvatarRoleConfig(): AvatarRoleValue {
+  const allowedRoles = new Set([1, 2, 3, 4]);
+  if (allowedRoles.has(AVATAR_ROLE)) {
+    return AVATAR_ROLE as AvatarRoleValue;
+  }
+  console.warn(
+    `Ungültiger AVATAR_ROLE=${String(AVATAR_ROLE)} in secrets.ts. Fallback auf Rolle 2.`
+  );
+  return 2;
+}
+
+function getRoleInstructions(role: AvatarRoleValue): string {
+  switch (role) {
+    case 1:
+      return `ROLLENPROFIL 1:
+- Du bist stark zielorientiert.
+- Du bist sehr strukturiert.
+- Du führst dominant, klar und konsequent.
+- Du bleibst in Aussagen fest und konsistent.`;
+    case 2:
+      return `ROLLENPROFIL 2:
+- Du bist unterstützend und wertschätzend.
+- Du fokussierst Wissenstransfer.
+- Du stellst regelmäßig Fragen zu den definierten Zielen.`;
+    case 3:
+      return `ROLLENPROFIL 3:
+- Du fokussierst reinen Wissenstransfer.
+- Du stellst nur wenige Fragen.
+- Du hältst die Dialogstruktur bewusst minimal.`;
+    case 4:
+      return `ROLLENPROFIL 4:
+- Du motivierst stark und aktivierend.
+- Du gibst ergänzend Wissenstransfer.
+- Du stellst in moderater Häufigkeit Fragen im Gespräch.`;
+    default:
+      return "";
+  }
 }
 
 function getStringField(row: Record<string, unknown>, aliases: string[]): string {
@@ -153,8 +195,11 @@ async function fetchParticipantData(participantId: string): Promise<ParticipantD
 
 function generateSalesPrompt(
   participantId: string,
-  participant: ParticipantData | null
+  participant: ParticipantData | null,
+  avatarRole: AvatarRoleValue
 ): string {
+  const roleInstructions = getRoleInstructions(avatarRole);
+
   return `Du bist ein professioneller Coach für Führung und Vertrieb.
 Dein Schwerpunkt liegt auf Orientierung, Entscheidungssicherheit und klarer Zielsteuerung.
 
@@ -214,6 +259,9 @@ Ton & Haltung:
 
 Du bist jederzeit der Orientierungsgeber.
 Du führst Schritt für Schritt zur Entscheidungssicherheit.
+
+${roleInstructions}
+
 TEILNEHMER-ID:
 ${participantId}
 
@@ -249,12 +297,14 @@ export async function POST(request: Request) {
 
     const selectedAvatarId = avatarId || AVATAR_ID;
     const selectedVoiceId = voiceId || VOICE_ID;
+    const selectedAvatarRole = getAvatarRoleConfig();
 
     const businessName = `Teilnehmer ${effectiveParticipantId}`;
     const participantData = await fetchParticipantData(effectiveParticipantId);
     const systemPrompt = generateSalesPrompt(
       effectiveParticipantId,
-      participantData
+      participantData,
+      selectedAvatarRole
     );
 
     let greetingTarget = "Teilnehmer";
@@ -307,6 +357,7 @@ export async function POST(request: Request) {
       JSON.stringify({
         contextId,
         businessName,
+        avatarRole: selectedAvatarRole,
         personId: participantData?.personId || null,
         personalId: participantData?.personalId || effectiveParticipantId,
       }),
