@@ -1,7 +1,6 @@
 ---
 name: ai-sdr-agent
 description: Create an instant AI SDR (Sales Development Representative) agent using HeyGen LiveAvatar. Use this when the user wants to create an AI sales rep, AI SDR, or AI avatar for real-time coaching/sales conversations.
-user-invocable: true
 argument-hint: ""
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 ---
@@ -12,12 +11,10 @@ You are helping the user set up an AI SDR (Sales Development Representative) age
 
 ## Required Information
 
-1. **LiveAvatar API Key** (REQUIRED) - Get your free API key from https://app.liveavatar.com/developers (sign in with your HeyGen account)
-2. **Participant ID** (OPTIONAL for auto-start) - Only needed if the user wants auto-start configuration.
+1. **HeyGen LiveAvatar API Key** - Get it from https://app.heygen.com/settings/api
+2. **Participant ID** (optional for auto-start)
 
 Parse any provided arguments: $ARGUMENTS
-
-**IMPORTANT**: Do not proceed without a valid API key.
 
 ## Setup Steps
 
@@ -79,7 +76,7 @@ npm run dev
 
 | Error | Meaning | Solution |
 |-------|---------|----------|
-| Invalid API key | The LiveAvatar API key is wrong | Check key at https://app.liveavatar.com/developers |
+| Invalid API key | The LiveAvatar API key is wrong | Check key at https://app.heygen.com/settings/api |
 | Avatar expired | Default avatar needs renewal | Select different avatar or renew HeyGen subscription |
 | Context creation failed | API limit or server issue | Wait and retry, or check HeyGen account status |
 
