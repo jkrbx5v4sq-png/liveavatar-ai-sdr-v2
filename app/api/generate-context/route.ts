@@ -21,9 +21,14 @@ interface ParticipantData {
 type AvatarRoleValue = 1 | 2 | 3 | 4;
 
 function getAvatarRoleConfig(): AvatarRoleValue {
-  const allowedRoles = new Set([1, 2, 3, 4]);
-  if (allowedRoles.has(AVATAR_ROLE)) {
-    return AVATAR_ROLE as AvatarRoleValue;
+  const allowedRoles = new Set<AvatarRoleValue>([1, 2, 3, 4]);
+  const normalizedRole =
+    typeof AVATAR_ROLE === "string"
+      ? Number.parseInt(AVATAR_ROLE, 10)
+      : AVATAR_ROLE;
+
+  if (allowedRoles.has(normalizedRole as AvatarRoleValue)) {
+    return normalizedRole as AvatarRoleValue;
   }
   console.warn(
     `Ungültiger AVATAR_ROLE=${String(AVATAR_ROLE)} in secrets.ts. Fallback auf Rolle 2.`
