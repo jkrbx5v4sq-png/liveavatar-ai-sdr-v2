@@ -321,19 +321,9 @@ export async function POST(request: Request) {
       topicData
     );
 
-    let greetingTarget = "Teilnehmer";
-    if (participantData) {
-      const fullName = [participantData.firstName, participantData.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      greetingTarget =
-        fullName ||
-        participantData.firstName ||
-        participantData.lastName ||
-        "Teilnehmer";
-    }
-    const openingText = `Guten Tag, ${greetingTarget}. Ich bin ihr Coach für Führung und Vertrieb.`;
+    const firstName = participantData?.firstName?.trim() || "Teilnehmer";
+    const topicName = topicData?.name?.trim() || selectedTopicCode;
+    const openingText = `Hallo ${firstName}, schön, dass du da bist. Heute erfähst du, was die Vorteile von ${topicName} sind.`;
 
     // Kontext (Knowledge Base) bei LiveAvatar anlegen
     const timestamp = Date.now();
