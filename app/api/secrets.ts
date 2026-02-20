@@ -22,7 +22,11 @@ export const VOICE_ID = "864a26b8-bfba-4435-9cc5-1dd593de5ca7";
 // 2 = unterstützend + Wissenstransfer + regelmäßige Fragen
 // 3 = Wissenstransfer mit wenig Fragen
 // 4 = motivierend + moderater Wissenstransfer + moderate Fragen
-export const AVATAR_ROLE: 1 | 2 | 3 | 4 = 3;
+export const AVATAR_ROLE: 1 | 2 | 3 | 4 = 2;
+
+// Knowledge-Base Topic-Code aus public.kb_topics.code
+// Beispiele: "avatar_benefits", "goal_setting", "argumentation", "approach"
+export const KB_TOPIC_CODE = "avatar_benefits";
 
 // Context ID - using the existing Wayne context for now
 // The skill will create custom contexts for specific personas
