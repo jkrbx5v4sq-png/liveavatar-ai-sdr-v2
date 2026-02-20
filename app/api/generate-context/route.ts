@@ -4,6 +4,7 @@ import {
   AVATAR_ID,
   VOICE_ID,
   AVATAR_ROLE,
+  KB_TOPIC_CODE,
 } from "../secrets";
 import { supabaseServer } from "@/src/lib/supabase/server";
 
@@ -18,14 +19,17 @@ interface ParticipantData {
   sourceTable?: string;
 }
 
+interface KnowledgeTopicData {
+  code: string;
+  name?: string;
+  description?: string;
+}
+
 type AvatarRoleValue = 1 | 2 | 3 | 4;
 
 function getAvatarRoleConfig(): AvatarRoleValue {
   const allowedRoles = new Set<AvatarRoleValue>([1, 2, 3, 4]);
-  const normalizedRole =
-    typeof AVATAR_ROLE === "string"
-      ? Number.parseInt(AVATAR_ROLE, 10)
-      : AVATAR_ROLE;
+  const normalizedRole = AVATAR_ROLE;
 
   if (allowedRoles.has(normalizedRole as AvatarRoleValue)) {
     return normalizedRole as AvatarRoleValue;
@@ -95,6 +99,32 @@ function getStringField(row: Record<string, unknown>, aliases: string[]): string
     }
   }
   return "";
+}
+
+async function fetchKnowledgeTopicData(topicCode: string): Promise<KnowledgeTopicData | null> {
+  const normalizedCode = topicCode.trim().toLowerCase();
+  if (!normalizedCode) return null;
+
+  const { data, error } = await supabaseServer
+    .from("kb_topics")
+    .select("code, name, description")
+    .eq("code", normalizedCode)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("KB topic lookup failed:", error.message);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    code: getStringField(data as Record<string, unknown>, ["code"]) || normalizedCode,
+    name: getStringField(data as Record<string, unknown>, ["name"]),
+    description: getStringField(data as Record<string, unknown>, ["description"]),
+  };
 }
 
 async function fetchParticipantData(participantId: string): Promise<ParticipantData | null> {
@@ -224,12 +254,23 @@ async function fetchParticipantData(participantId: string): Promise<ParticipantD
 function generateSalesPrompt(
   participantId: string,
   participant: ParticipantData | null,
-  avatarRole: AvatarRoleValue
+  avatarRole: AvatarRoleValue,
+  topicCode: string,
+  topicData: KnowledgeTopicData | null
 ): string {
   const roleInstructions = getRoleInstructions(avatarRole);
+  const topicTitle = topicData?.name || topicCode;
+  const topicDescription =
+    topicData?.description ||
+    `Für den angegebenen Topic-Code "${topicCode}" wurde keine aktive Beschreibung in public.kb_topics gefunden.`;
 
   return `
   ${roleInstructions}
+
+WISSENSBASIS AUS public.kb_topics:
+- Topic-Code: ${topicCode}
+- Topic-Name: ${topicTitle}
+- Topic-Beschreibung: ${topicDescription}
 
 TEILNEHMER-ID:
 ${participantId}
@@ -267,13 +308,17 @@ export async function POST(request: Request) {
     const selectedAvatarId = avatarId || AVATAR_ID;
     const selectedVoiceId = voiceId || VOICE_ID;
     const selectedAvatarRole = getAvatarRoleConfig();
+    const selectedTopicCode = (KB_TOPIC_CODE || "avatar_benefits").trim().toLowerCase();
 
     const businessName = `Teilnehmer ${effectiveParticipantId}`;
     const participantData = await fetchParticipantData(effectiveParticipantId);
+    const topicData = await fetchKnowledgeTopicData(selectedTopicCode);
     const systemPrompt = generateSalesPrompt(
       effectiveParticipantId,
       participantData,
-      selectedAvatarRole
+      selectedAvatarRole,
+      selectedTopicCode,
+      topicData
     );
 
     let greetingTarget = "Teilnehmer";
@@ -327,6 +372,7 @@ export async function POST(request: Request) {
         contextId,
         businessName,
         avatarRole: selectedAvatarRole,
+        kbTopicCode: selectedTopicCode,
         personId: participantData?.personId || null,
         personalId: participantData?.personalId || effectiveParticipantId,
       }),
