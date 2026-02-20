@@ -285,12 +285,9 @@ ANWEISUNGEN: Du musst die folgenden Anweisungen befolgen, wenn du auf Benutzer a
 ${roleInstructions}
 
 WISSENSBASIS
-- Topic-Code: ${topicCode}
-- Topic-Name: ${topicTitle}
-- Beschreibung: ${topicDescription}
+${topicDescription}
 
-TEILNEHMER-ID:
-${participantId}
+TEILNEHMER-ID ${participantId}
 
 TEILNEHMERDATEN AUS DER DATENBANK (falls vorhanden):
 ${participant
