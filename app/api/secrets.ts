@@ -26,7 +26,7 @@ export const AVATAR_ROLE: 1 | 2 | 3 | 4 = 3;
 
 // Knowledge-Base Topic-Code aus public.kb_topics.code
 // Beispiele: "avatar_benefits", "goal_setting", "argumentation", "approach"
-export const KB_TOPIC_CODE = "vme_akademie";
+export const KB_TOPIC_CODE = "avatar_benefits";
 
 // Context ID - using the existing Wayne context for now
 // The skill will create custom contexts for specific personas
